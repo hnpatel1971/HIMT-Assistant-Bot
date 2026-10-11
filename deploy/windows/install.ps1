@@ -84,9 +84,12 @@ if (-not (Test-Path $EnvFile)) {
 # HIMT Assistant Bot settings, one NAME=value per line. Lines starting with # are ignored.
 # Replace every FILL_ME, save, and run install.ps1 again.
 
-# The address the bot is served on, for example chat.himtmarine.com. Point its
-# DNS record at this server. IIS uses it to tell bot traffic from LMS traffic.
-BOT_HOSTNAME=FILL_ME
+# Without a domain, leave BOT_HOSTNAME empty: the bot is served on this
+# server's IP address at port BOT_PORT, for example http://203.0.113.10:8081/.
+# With a domain (for example chat.himtmarine.com, DNS pointing at this server),
+# set it here: the bot is then served on port 80/443 for that name only.
+BOT_HOSTNAME=
+BOT_PORT=8081
 
 # Claude API key from https://console.anthropic.com/settings/keys
 ANTHROPIC_API_KEY=FILL_ME
@@ -169,6 +172,8 @@ if ((Get-Content $EnvFile) -match "=FILL_ME") {
   exit 0
 }
 $hostName = $config["BOT_HOSTNAME"]
+$publicPort = if ($hostName) { 80 } elseif ($config["BOT_PORT"]) { [int]$config["BOT_PORT"] } else { 8081 }
+if (-not $hostName -and $publicPort -in 80, 443, 8080, $Port) { throw "BOT_PORT $publicPort is already used by the LMS or the bot service; pick another, for example 8081." }
 
 # --- Code ---
 
@@ -236,7 +241,7 @@ Write-Host "The bot is running on port $Port."
 
 # --- IIS ---
 
-Step "Pointing IIS at the bot for $hostName"
+Step "Pointing IIS at the bot"
 Import-Module WebAdministration
 $appcmd = "$env:windir\system32\inetsrv\appcmd.exe"
 # Same server-wide proxy settings HIMT-LMS uses, so running either script keeps both working.
@@ -247,27 +252,35 @@ if (-not ($allowed -match "HTTP_X_FORWARDED_PROTO")) {
 }
 New-Item -ItemType Directory -Force $SiteDir | Out-Null
 Copy-Item -Force "$AppDir\deploy\windows\web.config" "$SiteDir\web.config"
-# A host-name binding, so the LMS site keeps every other request on port 80.
+# Either a host-name binding on port 80 or its own port on the IP address, so the
+# LMS site keeps every other request on port 80.
 $site = Get-Website | Where-Object { $_.Name -eq $SiteName }
 if (-not $site) {
-  New-Website -Name $SiteName -Port 80 -HostHeader $hostName -PhysicalPath $SiteDir | Out-Null
-} elseif (-not (Get-WebBinding -Name $SiteName -Protocol http -Port 80 -HostHeader $hostName)) {
-  Get-WebBinding -Name $SiteName -Protocol http -Port 80 | Remove-WebBinding
-  New-WebBinding -Name $SiteName -Protocol http -Port 80 -HostHeader $hostName
+  New-Website -Name $SiteName -Port $publicPort -HostHeader $hostName -PhysicalPath $SiteDir | Out-Null
+} elseif (-not (Get-WebBinding -Name $SiteName -Protocol http -Port $publicPort -HostHeader $hostName)) {
+  Get-WebBinding -Name $SiteName -Protocol http | Remove-WebBinding
+  New-WebBinding -Name $SiteName -Protocol http -Port $publicPort -HostHeader $hostName
 }
 Start-Website $SiteName
 
-foreach ($port in 80, 443) {
+$ports = if ($hostName) { @(80, 443) } else { @($publicPort) }
+foreach ($port in $ports) {
   if (-not (Get-NetFirewallRule -DisplayName "HIMT Assistant Bot $port" -ErrorAction SilentlyContinue)) {
     New-NetFirewallRule -DisplayName "HIMT Assistant Bot $port" -Direction Inbound -Protocol TCP -LocalPort $port -Action Allow | Out-Null
   }
 }
 
 $viaIis = $false
-try { $viaIis = (Invoke-WebRequest -UseBasicParsing -Headers @{ Host = $hostName } "http://localhost/api/health").StatusCode -eq 200 } catch { }
-if (-not $viaIis) { throw "IIS is not passing requests for $hostName to the bot. Check that URL Rewrite and ARR are installed, then run again." }
+$headers = if ($hostName) { @{ Host = $hostName } } else { @{} }
+try { $viaIis = (Invoke-WebRequest -UseBasicParsing -Headers $headers "http://localhost:$publicPort/api/health").StatusCode -eq 200 } catch { }
+if (-not $viaIis) { throw "IIS is not passing requests to the bot. Check that URL Rewrite and ARR are installed, then run again." }
 
 Write-Host ""
-Write-Host "Done. Once $hostName points at this server, open http://$hostName/ in a browser." -ForegroundColor Green
-Write-Host "Add an HTTPS certificate for $hostName (docs/deploy-windows.md), then embed:" -ForegroundColor Green
-Write-Host "  <script src=`"https://$hostName/embed.js`" async></script>" -ForegroundColor Green
+if ($hostName) {
+  Write-Host "Done. Once $hostName points at this server, open http://$hostName/ in a browser." -ForegroundColor Green
+  Write-Host "Add an HTTPS certificate for $hostName (docs/deploy-windows.md), then embed:" -ForegroundColor Green
+  Write-Host "  <script src=`"https://$hostName/embed.js`" async></script>" -ForegroundColor Green
+} else {
+  Write-Host "Done. Open http://<this server's IP address>:$publicPort/ in a browser to try the bot." -ForegroundColor Green
+  Write-Host "Embedding on an https:// website needs a domain name and certificate (docs/deploy-windows.md)." -ForegroundColor Green
+}
