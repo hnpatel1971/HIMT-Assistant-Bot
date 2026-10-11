@@ -2,7 +2,7 @@
  * HIMT AI Chatbot — Embed snippet.
  *
  * Paste this on any page of himtmarine.com (just before </body>):
- *   <script src="https://himt-assistant-bot.preview.emergentagent.com/embed.js" async></script>
+ *   <script src="https://<your-chatbot-host>/embed.js" async></script>
  *
  * It creates a bottom-right floating iframe that loads the HIMT chatbot.
  * The iframe auto-resizes when the chat panel opens/closes.

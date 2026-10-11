@@ -10,10 +10,10 @@ Production-oriented AI chatbot embedded on the HIMT websites (himtmarine.com, hi
 - Existing students verifying admission / booking procedures
 
 ## Architecture
-- **Backend**: FastAPI + MongoDB + emergentintegrations LlmChat (OpenAI GPT 5.2)
+- **Backend**: FastAPI + MongoDB + Anthropic Claude API (claude-opus-5-5)
 - **Frontend**: React + Tailwind + Shadcn UI + Framer Motion
 - **RAG pipeline**: crawl → clean → chunk → intent-tag → keyword+URL-boosted ranking → grounded LLM answer
-- **User-provided OpenAI API key**
+- **Anthropic API key (ANTHROPIC_API_KEY)**
 
 ## Embed on himtmarine.com
 Snippet placed just before `</body>`:
@@ -28,9 +28,9 @@ Snippet placed just before `</body>`:
 - ✅ Alias handling: HIMT ↔ Hindustan Institute of Maritime Training
 - ✅ Structured extraction of contact facts (emails/phones/addresses) with HIMT-domain filter
 - ✅ Chunk-level retrieval with intent-aware URL-canonical boosting (courses/about/admissions/contact/presea/documents/app)
-- ✅ Grounded GPT 5.2 answers via emergentintegrations LlmChat
+- ✅ Grounded Claude answers via the anthropic SDK
 - ✅ Source-linked answers (up to 4 unique HIMT URLs per response) with HOST DIVERSITY
-- ✅ Graceful fallback with rule-based response when OpenAI fails
+- ✅ Graceful fallback with rule-based response when the Claude call fails
 - ✅ Chat log persistence, SHA256 cache
 - ✅ Admin console at /admin (token-gated): re-ingest, stats/runs/facts/logs
 - ✅ Auto-ingestion on first boot; manual re-ingest via admin

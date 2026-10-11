@@ -6,7 +6,7 @@ import uuid
 import pytest
 import requests
 
-BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/") if os.environ.get("REACT_APP_BACKEND_URL") else "https://himt-assistant-bot.preview.emergentagent.com"
+BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/") if os.environ.get("REACT_APP_BACKEND_URL") else "http://localhost:8001"
 API = f"{BASE_URL}/api"
 ADMIN_TOKEN = "himt-admin-2026"
 TIMEOUT = 90
@@ -34,7 +34,7 @@ class TestHealth:
         assert d["pages_indexed"] > 0
         assert d["chunks_indexed"] > 0
         assert d["has_structured_facts"] is True
-        assert d["openai_configured"] is True
+        assert d["claude_configured"] is True
         assert d["latest_ingestion"] is not None
         # Accept 'running' too — parallel xdist worker may trigger reingest concurrently
         assert d["latest_ingestion"]["status"] in ("completed", "running")
