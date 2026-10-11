@@ -1,0 +1,38 @@
+{
+  "summary": "Retest iteration 2 — all 3 iteration_1 minor issues are FIXED and full backend suite passes 17/17 (100%). (1) Courses intent now cites canonical course pages (/basic-modular-courses/, /uk-mca-approved-course/, /revalidation-upgradation-courses/, /discounted-package/) instead of industry-reviews/discounts. (2) About intent cites /our-faculty/ and /green-himt/ (no industry-reviews). (3) /api/admin/facts emails are strictly from HIMT domains only (admin@himtoffshore.com, admission@himtcollege.com, help@himtmarine.com) — pridehotel and myftpupload leaks are gone. (4) Phones list contains no date-like tokens (no 01-25-2020 or 2019-2020 patterns). Full regression pass on health, suggested prompts, chat (empty/about/contact/courses/admissions/insufficient/cache), admin auth (missing/wrong/correct token), admin stats/facts/logs/logs-filtered, and reingest flow.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/admin/facts (phones)", "issue": "Phones list still contains some noisy fragments that look like postal-code + partial-number joins: '600113 9941', '600041 9908', '600 041 8248', '600096 7305'. Not date-like (retest criteria satisfied) but not clean phone numbers either. Consider adding a stricter phone regex or minimum-digit / country-code filter."},
+      {"endpoint": "/api/chat (contact_info)", "issue": "One transient 'insufficient' response observed during a parallel run (2/2 workers). Immediate re-run returned 'grounded'. Suggests occasional retrieval jitter under concurrent requests; not consistently reproducible. May be worth a small stability check (retry or top_k floor) if it recurs."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Tighten phone extraction in ingestion._valid_phone to reject fragments like '600113 9941' where the leading token looks like a Chennai postal code (600xxx) rather than an STD/mobile prefix.",
+    "(Optional) Investigate rare 'insufficient' response for contact-info query when multiple chat requests fire in parallel."
+  ],
+  "critical_code_review_comments": [
+    "Retrieval scoring fix in retrieval.score_chunk (INTENT_URL_PATTERNS canonical *4.0+4.0 boost, DEPRIORITIZE_FOR_INTENT *0.25 penalty, homepage/generic *0.35 penalty for courses) is effective — course intent now surfaces canonical course pages. Recommend adding a unit test around score_chunk to lock in this behavior.",
+    "ingestion._valid_himt_email domain allowlist is working; ensure the allowlist is maintained in a single constant (HIMT_EMAIL_DOMAINS) and covered by a fast regex to avoid future third-party leaks.",
+    "Phone validator is good on date rejection but permissive on short compact strings joined with postal codes — consider requiring a leading +country, 0STD, or 10-digit mobile pattern anchored at word boundary."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {"backend": "100% (17/17)", "frontend": "not tested (backend-only retest)"},
+  "test_credentials": "Admin token: himt-admin-2026 (X-Admin-Token header). /app/memory/test_credentials.md exists but is a template header only.",
+  "seed_data_creation": "No new seed data. Reused existing 30 pages / 248 chunks. Cache test uses unique per-run query suffix.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend suite in /app/backend/tests/backend_test.py has 17 tests across TestHealth, TestSuggested, TestChat (empty/about/contact/courses/admissions/insufficient/cache), TestAdminAuth, TestAdminData (stats/facts/logs/logs_filtered), TestAdminReingest. Assertions now strictly enforce: (a) courses intent → canonical course pages; (b) about intent → about/faculty/timeline/green/campus (not industry-reviews); (c) facts.emails from HIMT domains only; (d) facts.phones not date-like and ≥7 digits. Full pass in 6.88s under pytest-xdist (2 workers). Public base URL = REACT_APP_BACKEND_URL from /app/frontend/.env.",
+  "rca of the issue": "Iteration 1 RCA (retrieval quality + fact-extraction leaks) was correctly addressed by the main agent: (1) retrieval.score_chunk gained INTENT_URL_PATTERNS canonical boost and DEPRIORITIZE penalty for course/about intents; (2) ingestion._extract_facts added _valid_himt_email domain filter and _valid_phone date-token rejection. Re-ingestion + cache clear ensured the new facts and rankings are reflected end-to-end. All three iteration_1 minor issues are closed."
+}

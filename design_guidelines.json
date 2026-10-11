@@ -1,0 +1,122 @@
+{
+  "theme": "dark",
+  "archetype": "Deep Ocean Tactical (Luxury & Authority)",
+  "colors": {
+    "background": "#020813",
+    "surface": "#0B1325",
+    "surface_glass": "rgba(2, 8, 19, 0.7)",
+    "primary": "#FF5722",
+    "primary_hover": "#F4511E",
+    "accent_ai": "#00E5FF",
+    "text_main": "#F8FAFC",
+    "text_muted": "#94A3B8",
+    "border": "rgba(255, 255, 255, 0.1)"
+  },
+  "typography": {
+    "headings": "Cabinet Grotesk",
+    "body": "IBM Plex Sans",
+    "technical_and_chat": "JetBrains Mono",
+    "rules": [
+      "No Inter, Roboto, or generic sans for headings.",
+      "Headings > 32px MUST use tracking-tight or tracking-tighter.",
+      "Use heavy weights (Bold/Black) for Main Landing Headings to show authority.",
+      "Use JetBrains Mono for Chatbot timestamps, Admin Dashboard data, and bot source links."
+    ]
+  },
+  "layouts": {
+    "landing_page": {
+      "strategy": "The 'Bento' Grid Protocol - Mode A (Asymmetry)",
+      "details": "Use grid-cols-1 md:grid-cols-12 with wide gaps (gap-12). Create visual tension by offsetting elements. Use generous padding (p-12 to p-24) for sections. Do not center everything; rely on strong left alignments and overlapping images."
+    },
+    "chat_widget": {
+      "strategy": "Floating Support Shell + Crystal Glassmorphism",
+      "details": "Bottom-right fixed trigger. Opens into a compact drawer/modal. Uses backdrop-blur-2xl and bg-black/60. MUST NOT use full screen takeover on desktop. Include quick-reply chips and source links styled as pill buttons."
+    },
+    "admin_dashboard": {
+      "strategy": "High Density Grid - Mode B + Grid Borders",
+      "details": "Dense layout (grid-cols-1 md:grid-cols-4 gap-6). Use flat solid backgrounds for cards with a 1px technical border (border-border/40). Expose the skeleton of the UI. Highly legible, no decorative gradients."
+    }
+  },
+  "visual_enhancers": {
+    "chat_widget_glass": "backdrop-blur-2xl bg-[#020813]/75 border border-white/10 shadow-[0_8px_32px_rgba(0,229,255,0.1)]",
+    "buttons": "Pill-shaped or slightly rounded (rounded-md) with sharp hover transitions. Primary actions in Safety Orange (#FF5722).",
+    "grain_overlay": "Implement a subtle SVG noise/grain over the main hero landing section to remove 'digital flatness'."
+  },
+  "components": {
+    "landing_hero": "Dark oceanic background image with bg-[#020813]/60 overlay. Massive typography. Clear CTA to explore courses.",
+    "chat_trigger": "Circular floating button in Safety Orange or AI Cyan, featuring an unread indicator dot and subtle pulse animation.",
+    "chat_bubble_user": "Flat solid styling, aligned right, bg-white/10.",
+    "chat_bubble_bot": "Flat solid styling, aligned left, subtle cyan border left (border-l-2 border-[#00E5FF]).",
+    "admin_table": "Shadcn Table customized with JetBrains Mono for data cells, technical grid borders, status badges for grounded/fallback responses."
+  },
+  "motion": {
+    "hover_states": "Crisp transformations (e.g., -translate-y-1) with color shifts.",
+    "chat_widget": "Framer motion scale-up from bottom-right origin on open.",
+    "typing_indicator": "Three dots bouncing sequence in bot bubble.",
+    "page_scroll": "Use Lenis for smooth momentum scrolling on the landing page."
+  },
+  "accessibility": {
+    "contrast": "Ensure text over images uses text-shadow or heavy gradient overlays (e.g., bg-black/60) to meet APCA contrast standards.",
+    "focus": "All inputs and buttons MUST have high-contrast focus rings (focus:ring-2 focus:ring-[#00E5FF]).",
+    "motion": "Respect prefers-reduced-motion for the chat widget expansion and typing indicators."
+  },
+  "media": {
+    "image_urls": {
+      "hero_background": {
+        "url": "https://images.pexels.com/photos/18415767/pexels-photo-18415767.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Moody, dark ocean surface with dramatic waves. Use as the main landing page hero background.",
+        "category": "hero"
+      },
+      "programs_overview": {
+        "url": "https://images.unsplash.com/photo-1613690399151-65ea69478674?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2OTV8MHwxfHNlYXJjaHwxfHxvY2VhbiUyMGNhcmdvJTIwc2hpcCUyMGFlcmlhbHxlbnwwfHx8fDE3ODU1NjczNzl8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Aerial view of a cargo ship on the ocean. Use in the Programs or About HIMT section.",
+        "category": "content"
+      },
+      "training_simulation": {
+        "url": "https://images.pexels.com/photos/21753184/pexels-photo-21753184.jpeg",
+        "description": "Ship captain in the control room overlooking a cargo ship. Use for training/facilities highlight.",
+        "category": "content"
+      },
+      "students_campus": {
+        "url": "https://images.unsplash.com/photo-1534724364725-325f10a8e182",
+        "description": "Students in white maritime uniform. Use for the Admissions or Campus Life section.",
+        "category": "content"
+      }
+    }
+  },
+  "3d_libraries": {
+    "recommendation": "Not strictly required, but TSParticles can be used in the hero background to simulate subtle ocean spray or data nodes (AI chatbot connection) without overwhelming the UX."
+  },
+  "instructions_to_main_agent": [
+    "This is a JavaScript (.js) project. DO NOT use TypeScript (.tsx) files or syntax.",
+    "Use standard HTML+Tailwind for the landing page to allow for creative, asymmetrical bento-box layouts.",
+    "Use Shadcn UI components for the chat widget logic, form inputs, and the dense admin dashboard.",
+    "Implement the Chat Widget as a fixed container (bottom-right) that toggles a conversational modal with Framer Motion.",
+    "Include 'Source Link' chips inside the bot's chat bubbles to show where the retrieved data came from.",
+    "For the Admin Dashboard, create a table view for chat logs containing Query, Answer, Timestamp, and Status (Grounded vs Fallback)."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "You MUST NOT apply universal transition. Eg: transition: all. Always add transitions for specific interactive elements.",
+    "You MUST NOT center align the app container, ie do not add .App { text-align: center; } in the css file.",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style.",
+    "NEVER: use AI assistant Emoji characters like robot/brain for icons.",
+    "Every interaction needs micro-animations - hover states, transitions. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "Missing categories (especially sponsor logos) = main agent will use placeholder text which is FORBIDDEN. ALWAYS USE THE PROVIDED IMAGE URLS.",
+    "Prioritize using pre-existing components from src/components/ui when applicable.",
+    "Use 'sonner' for toasts located in /app/frontend/src/components/ui/sonner.js"
+  ],
+  "GENERAL UI UX DESIGN GUIDELINES": [
+    "Always ensure a strong visible hierarchy. The most important action should instantly draw the eye.",
+    "Containers with borders MUST have internal padding (p-6 or p-8) to prevent text collision.",
+    "All interactive and key informational elements MUST include a 'data-testid' attribute to facilitate robust automated testing.",
+    "Hover state color must be a lighter hue of ACTIVE state color. ALWAYS explicitly set text color on hover.",
+    "Do not use complete transparent background in headers or overlays over content."
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 3 — full backend + frontend testing for the two new features (Lead Capture + Daily Scheduler). Backend: 31/31 tests pass (added 14 new tests for TestLeads, TestAdminLeads, TestChatLeadCaptureFlag, TestAdminSchedule) with all iteration_2 regression tests still green (health, suggested prompts, chat empty/about/contact/courses/admissions/insufficient/cache, admin auth/stats/facts/logs/logs_filtered, reingest flow). Frontend: chat widget lead capture (admissions query triggers form, empty-name error, short-phone error, valid submit → success + sonner toast, second admissions query does NOT re-render form) all pass; admin dashboard shows schedule-badge with 'Daily auto-refresh: 02:00 UTC' + next timestamp, leads-card with 8 total rows, 'Leads Captured' stat card in stats grid, and 'Mark contacted' button correctly toggles to 'Close' after status update. Scheduler is running with daily-ingest cron job at 02:00 UTC. Real OpenAI GPT-5.2 call verified end-to-end via chat flow (grounded answers with HIMT sources).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py: `import re` is placed at line 476 (after leads endpoint that already uses it). It works because the endpoint is called after module import completes, but it is misleading. Move `import re` to the top of the module with the other imports.",
+    "server.py POST /api/leads: validation happens inside the handler after Pydantic parsed the body, so an empty JSON body (missing `name`/`phone` entirely) returns 422 (FastAPI validation) rather than 400. The tests were written with fields present-but-empty (which returns 400). Consider aligning by making these Optional in `LeadCreate` and enforcing 400 uniformly, or documenting this behavior. Current handler is fine but semantically inconsistent.",
+    "PATCH /api/admin/leads/{id}: MongoDB `update_one` uses `matched_count == 0` for 404 correctly, but there's no updated-at timestamp being written. Consider setting `updated_at` when status transitions occur (useful for admin audit trail).",
+    "server.py:130 (`_scheduled_ingestion`): the 6h skip logic parses `finished_at` with `datetime.fromisoformat`. Since `_now_iso()` writes tz-aware ISO strings this is fine on Python 3.11+, but calling `.fromisoformat` on legacy naive strings would blow up — the `except Exception: pass` swallows this silently and would then proceed to run ingestion. Not a real bug now, but worth an explicit type check.",
+    "ChatWidget.jsx `leadSubmitted` state resets when the widget is unmounted (closing the chat panel does not unmount, so state survives across close/reopen, which is good). But a hard refresh clears it and the form would re-appear even if the user already submitted in a prior page-load. Consider persisting `leadSubmitted` per session_id in localStorage for a smoother UX.",
+    "Admin.jsx: no error/loading state on `adminSchedule` — if it 500s the schedule badge simply disappears with no user hint. Add a small fallback (e.g., 'Schedule unavailable').",
+    "Lead admin table: phone numbers are shown in a copy-to-clipboard button — good UX; consider adding the same for email."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {"backend": "100% (31/31)", "frontend": "100% (12/12 flow steps)"},
+  "test_credentials": "Admin token: himt-admin-2026 (X-Admin-Token header). /app/memory/test_credentials.md is a template header only — populate it if more test users are added.",
+  "seed_data_creation": "Created 5 TEST_-prefixed leads via public POST /api/leads during backend tests (TEST_lead_*, TEST_newest_*, TEST_update_*, TEST_badstatus_*) and 1 additional lead via Playwright ('TEST Playwright User'). Existing 3 non-TEST leads (Priya Kumar, Arjun Rao, Test Cadet) were preserved. Total leads in DB after run: 8.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend suite in /app/backend/tests/backend_test.py now has 31 tests. New classes for iteration 3: TestLeads (4 tests — create/validation), TestAdminLeads (6 tests — auth, list, newest-first, PATCH status/404/invalid), TestChatLeadCaptureFlag (2 tests — admissions triggers offer_lead_capture=true, courses does not), TestAdminSchedule (2 tests — auth + config with daily_hour_utc=2 and daily-ingest cron job). All iteration_2 regression tests preserved. Base URL from REACT_APP_BACKEND_URL. Scheduler is already running (started at supervisor startup) — do NOT restart backend to avoid disturbing next-run-time semantics. AI capability (OpenAI gpt-5.2 via emergentintegrations) verified end-to-end through chat grounded/insufficient tests — real user_provided_key is configured and working.",
+  "rca of the issue": "No issues found. Both new features (lead capture with per-session suppression + APScheduler daily cron with 6h skip window) are correctly implemented, wired, and integrated. Public POST /api/leads validates name/phone digit count (>=8), admin GET returns newest-first + total, PATCH validates status enum {new,contacted,closed} and returns 404 for unknown ids. ChatResponse now carries `intent` and `offer_lead_capture` (true iff intent=='admissions' and status in {grounded, insufficient}). ChatWidget uses local `leadSubmitted` guard to prevent re-rendering the form. Admin dashboard consumes /api/admin/schedule and renders 02:00 UTC + humanized next_run_time."
+}

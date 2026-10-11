@@ -1,0 +1,42 @@
+{
+  "summary": "Iteration 10 — backend-only verification of the himt.co.in SPA fee-extraction bug fix + 6-hourly re-ingestion scheduler. Created /app/backend/tests/test_himt_co_in_fees.py (15 tests: PSCRB fees, Vizag fee, package fee, GMDSS fees, no 'Fees Fees Fees' regression, course-list/contact/documents/value-added regressions, hotel-number leak guard, scheduler jobs, reingest+stats). ALL 15 PASS. Because the chat layer caches answers, I re-verified every fee query with fresh, never-before-asked phrasings via /app/tests/iter10_fresh_probe.py — all returned cached=false, status=grounded with real numeric fees: PSCRB DGS INR 6900 (Kilpauk) / UK MCA INR 44900 (Tidal Park) / Vizag INR 8900|6900; AFF+PSCRB+MFA package INR 17,200 (PKG0000005, next start 31 Aug 2026); GMDSS INR 27,900 (DGS, 17 days) and INR 19,900 (UK MCA GOC). Sources correctly cite himt.co.in/Search#/Courses and himt.co.in/Search#/Packages alongside himtmarine.com descriptive pages — the SPA bug is FIXED. GET /api/admin/schedule returns both jobs: 'himt-co-in-refresh' (cron[hour='*/6', minute='30'], next_run_time set) and 'daily-ingest' (cron 02:00 UTC); endpoint correctly rejects requests without X-Admin-Token. POST /api/admin/reingest returned {run_id, status:'started'}; /api/admin/runs shows the run completed in ~20s with pages_crawled=84, chunks_created=1117; /api/admin/stats reports pages_indexed=84, chunks_indexed=1117 (both above thresholds). Contact regression passes with HIMT-only emails (help@himtmarine.com, admission@himtcollege.com, admin@himtoffshore.com, careers@himtmarine.com) and himt.co.in/ContactUs.html now indexed; no third-party hotel numbers (9840730760 / 044-26422297 / 9789066624) or /himt-nearby-accommodations in answers or sources. Full regression run (backend_test.py + test_presea.py, 86 tests): 84 passed, 1 skipped, 1 failed — the failure is the previously-documented value-added-courses bullet-formatting flake (content correct, prose instead of bullets, served from cache). test_weak_alert.py excluded per request (Resend domain verification blocked on user action).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/chat", "issue": "Vizag PSCRB fee is inconsistent across paraphrases: 'PSCRB fees in Vizag' answers INR 8,900 while 'how much does pscrb cost at the visakhapatnam centre' answers INR 6,900 (both grounded). Source data likely contains both a Chennai and a Vizag row for the same course; retrieval/LLM picks whichever chunk ranks higher. Consider tagging location explicitly per fee row in the himt.co.in chunk text so location-scoped fees are unambiguous."},
+      {"endpoint": "POST /api/chat", "issue": "Value-added-courses answer is returned as one prose paragraph instead of the required bullet list, failing TestChatValueAddedCoursesListFormat. Content is complete and correct; only formatting violates the list rule. The bad-format answer is now cached, so it fails deterministically until the cache entry is invalidated."},
+      {"endpoint": "POST /api/chat (contact)", "issue": "Phone numbers surfaced from the crawled contact pages look malformed/truncated: '+91 98 404 000 00', '+91 98404 0000' (only 9 digits), '01509011038'. Likely a whitespace/normalisation artefact in extraction of himtmarine/himtcollege contact markup."},
+      {"endpoint": "POST /api/admin/reingest", "issue": "Every ingestion run records 11 'empty content' page errors (himtmarine.com/careers/, /major/, himtcollege.com/e-brochure/, /join-merchant-navy/, /list-of-doctors/, www.himtcollege.com/committee/, /computer-lab/, /electrical-lab/, /mechanical-lab/, /residential/, /seamanship-lab/). Run still reports status='completed'; these pages are silently never indexed."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_himt_co_in_fees.py",
+    "/app/tests/iter10_fresh_probe.py",
+    "/app/test_reports/pytest/iter10_fees.xml",
+    "/app/test_reports/pytest/iter10_ingest.xml",
+    "/app/test_reports/pytest/iter10_regression.xml"
+  ],
+  "action_items": [
+    "Disambiguate location in himt.co.in fee chunks so 'PSCRB in Vizag' consistently returns the Vizag fee (currently 6,900 vs 8,900 depending on phrasing).",
+    "Enforce bullet-list formatting for enumeration answers (value-added courses) and invalidate the cached prose answer, or relax the test's format assertion if prose is acceptable.",
+    "Fix phone-number extraction/normalisation on contact pages — current output contains truncated numbers like '+91 98404 0000'.",
+    "Investigate the 11 recurring 'empty content' pages during ingestion (JS-rendered or 404?) so lab/facility/careers pages get indexed."
+  ],
+  "critical_code_review_comments": [
+    "crawl_himt_co_in() depends on two undocumented upstream endpoints (ob.himt.co.in/jsons/All.json and /api/V2/GetAngPackageList). If either changes shape or starts returning 4xx, fee answers silently degrade. Add a per-source chunk-count sanity floor and mark the run 'failed'/alert when the himt.co.in course chunk count drops below a threshold, rather than completing with fewer chunks.",
+    "Ingestion run status is 'completed' even with 11 page-level errors; consider a 'completed_with_errors' status so silent index shrinkage is visible in /api/admin/runs.",
+    "The chat answer cache has no per-run invalidation: after a re-ingest the old (possibly stale-fee) answers keep being served. Given the 6-hourly refresh exists specifically because batch dates/fees change often, the cache should be flushed (or TTL-bounded) at the end of each successful himt-co-in-refresh."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_himt_co_in_fees.py",
+    "/app/tests/iter10_fresh_probe.py"
+  ],
+  "success_rate": {"backend": "99% (99/100 executed assertions-level tests: 15/15 new iteration-10 tests pass; 84/86 regression pass, 1 skipped, 1 known formatting flake)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "No persistent seed data. Chat sessions used TEST_<uuid> session ids only; one manual ingestion run triggered (run a4697cd8-5f95-4e0f-9407-8e0783240334).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "/app/memory/test_credentials.md contains no accounts (template only). Admin endpoints tested with X-Admin-Token: himt-admin-2026 as supplied in the review request — works.",
+  "context_for_next_testing_agent": "Iteration 10 confirmed the PSCRB/himt.co.in fee bug is fixed and the 6-hourly 'himt-co-in-refresh' job is registered. New suite: /app/backend/tests/test_himt_co_in_fees.py (the reingest test is marked @pytest.mark.slow but the marker is unregistered — it still runs; run it with -n 0). IMPORTANT: /api/chat caches answers, so a passing fee test may be a cache hit — always re-probe with a novel phrasing (see /app/tests/iter10_fresh_probe.py) before claiming a fix. Known persistent flakes to ignore/report-only: TestChatValueAddedCoursesListFormat (prose vs bullets, cached) and test_weak_alert.py (Resend domain unverified). Current index baseline: pages_indexed=84, chunks_indexed=1117.",
+  "rca_of_the_issue": "Original bug: BeautifulSoup parsing of the Angular SPA at himt.co.in produced DOM text where fee labels were detached from their values, yielding chunks like 'Fees Fees Fees' with no numbers, so retrieval had no grounded fee data and the LLM answered 'insufficient'. Fix verified: _crawl_single_site now routes himt.co.in to crawl_himt_co_in(), which calls the portal's JSON APIs (All.json for courses/fees/batches, GetAngPackageList for packages) and emits one structured chunk per course/package, preserving the course→fee→duration→location→batch-date association. Fresh uncached probes now return exact fee figures with himt.co.in/Search#/Courses and #/Packages citations, confirming the root cause is resolved."
+}

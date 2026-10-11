@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 4 (backend only) — verified two production bug fixes on preview backend. BUG 1 (Campus address): 3 new tests pass; POST /api/chat with 'Campus address', 'HIMT campus location', 'Where is the HIMT campus?' all return status='grounded' with real HIMT campus addresses (e.g. '11, Millers Road, Kilpauk, Chennai – 600 010' and '55, East Coast Road, ... Kalpakkam, Tamil Nadu - 603102') sourced from /faq/, /himt-nearby-accommodations/, /campus/. BUG 2 (Booking link): 3 new tests pass; 'Booking link', 'Give me the booking link', 'Where can I book online?' all return status='grounded' with 'https://himtmarine.com/booking-procedures/' embedded verbatim in the answer text. REGRESSION: all 31 prior tests still pass (about/contact/courses/admissions grounded intents, insufficient handling for Bitcoin, cache hit, health, suggested prompts, admin auth/stats/facts/logs/reingest, leads CRUD + admin PATCH, chat lead-capture flag, admin scheduler). Real OpenAI gpt-5.2 call verified end-to-end via emergentintegrations (openai_configured=true, grounded HIMT answers). 37 tests total, 36 passed on first run — the 1 failure (TestHealth::test_health_ok expecting latest_ingestion.status=='completed') was a flaky parallel-execution race with TestAdminReingest which triggers a fresh ingest run; re-run of the same test immediately after ingestion finished = PASS. Not a real bug — pre-existing xdist ordering issue in the test suite.\n\nPrimary AI feature: pass. Evidence: POST /api/chat 'Campus address' -> status=grounded, answer='- **HIMT (Kilpauk, Chennai):** \"11, Millers Road, Kilpauk, Chennai – 600 010.\"  - **HIMT College (Pre-Sea Campus, Kalpakkam):** \"55, East Coast Road, 72-B, Arambakkam, Vengampakkam Junction, Kalpakkam, Tamil Nadu - 603102\"  https://himtmarine.com/campus/', latency=2106ms, cached=false; POST /api/chat 'Give me the booking link' -> status=grounded, answer='https://himtmarine.com/booking-procedures/'. Skill loaded: ai-testing-llm.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "test_suite", "issue": "TestHealth::test_health_ok is flaky when TestAdminReingest triggers a re-ingestion on the parallel xdist worker; latest_ingestion.status flips to 'running' momentarily. Consider making the assertion accept ['completed','running'] or serialising the reingest test to run last. Not a product bug; a test-ordering artefact."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "retrieval.py INTENT_MAP.admissions has 'link','url','website','portal' — this correctly routes booking-link queries to the admissions intent. Consider adding 'download' as well to cover 'download the booking form' variants.",
+    "retrieval.py INTENT_MAP.contact intentionally includes 'where is' and 'situated' which are quite generic. If a course-related question ever contains 'where is X taught', it might be mis-routed to contact. Consider ordering intent match with more specific intents first, or requiring 'campus'/'located' proximity. Low risk given current corpus.",
+    "server.py SYSTEM_PROMPT Rule 9 says 'quote it verbatim' — the model correctly reproduced '600 010' with the internal space, but did drop the trailing period in one snapshot. Consider tightening 'verbatim' to include full punctuation, or accepting minor punctuation differences (current test does that).",
+    "server.py: `import re` still lives at line 476 (called out in iteration 3). Not fixed. Cosmetic — move to top-level imports."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {"backend": "100% (37/37 on retest; 36/37 first run due to flaky health/reingest race)", "frontend": "N/A (backend-only per review_request)"},
+  "test_credentials": "Admin token: himt-admin-2026 (X-Admin-Token header). /app/memory/test_credentials.md unchanged.",
+  "seed_data_creation": "Chat cache now contains 6 new grounded entries for the bug-fix queries + variations. 3 additional TEST_-prefixed leads created by TestLeads/TestAdminLeads (as in previous iterations). No production data modified.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend suite is now 37 tests in /app/backend/tests/backend_test.py. Two new classes added in iteration 4: TestChatCampusAddress (3 tests) and TestChatBookingLink (3 tests). If you re-run and see TestHealth::test_health_ok fail with latest_ingestion.status=='running', it's the flaky race with TestAdminReingest — either run TestHealth alone or wait ~10s and re-run; product side is fine. Real gpt-5.2 via emergentintegrations is configured and working — do not swap keys. Preview backend URL: https://himt-assistant-bot.preview.emergentagent.com.",
+  "rca of the issue": "BUG 1 (Campus address) RCA: Prior INTENT_MAP.contact lacked triggers like 'campus address', 'where is', 'situated', and INTENT_URL_PATTERNS.contact did not include '/campus'. So queries like 'Campus address' either fell into 'about' intent or fetched contact chunks that did not include the /campus page — producing 'insufficient' status and the canned 'I don't have that specific information' reply. Fix (retrieval.py) routes campus queries to contact intent and pulls /campus page chunks into the retrieval set. Verified: /campus/ URL now appears as a source and street lines are quoted verbatim. BUG 2 (Booking link) RCA: 'link'/'URL'/'website'/'portal' keywords were not mapped to admissions intent, so 'Booking link' matched a weaker intent whose top chunks were the procedural body of /booking-procedures/ WITHOUT the URL rendered in the answer (LLM would paraphrase). Fix adds those keywords to INTENT_MAP.admissions, plus SYSTEM_PROMPT Rule 8 mandates the LLM emit the SOURCE URL as a plain URL when link-type keywords are present. Verified: answer for 'Booking link' is literally 'https://himtmarine.com/booking-procedures/'. Both fixes are correctly scoped and do not break any prior intent (all regression tests green). Mitigation for cache: re-ingestion clears the answer_cache — main agent triggered this before test run, so no stale cached entries were served."
+}

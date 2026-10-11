@@ -1,0 +1,42 @@
+{
+  "summary": "First iteration full-stack testing of HIMT AI Chatbot. Backend: 16/17 pytest passed (94%). All admin auth, stats, facts, logs, reingest, health, cache, insufficient handling, contact/admissions retrieval, and grounded RAG chat work correctly. Frontend: Landing page + floating chat widget + admin dashboard all functional; login flow, chat send via prompt and via input+button, source chips, toast on reingest, and log filters all confirmed working. One backend retrieval-quality failure: 'What courses does HIMT offer?' returns generic pages (industry-reviews, discounts-and-offers) not course pages. Also observed retrieval quality issues on frontend: 'Tell me about HIMT' returned only 1 source (industry-reviews) and extracted contact facts contain non-HIMT emails (pridehotel, myftpupload) suggesting ingestion pulls unrelated content.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/chat (courses intent)", "issue": "Query 'What courses does HIMT offer?' returns grounded answer but sources are industry-reviews/ and discounts-and-offers/ pages instead of course/modular/training pages. Retrieval/intent boosting for 'courses' intent is not surfacing course pages."},
+      {"endpoint": "/api/admin/facts", "issue": "Structured facts include non-HIMT emails/phones (reservations.chennai@pridehotel.com, help@ebd.fab.myftpupload.com). Ingestion should filter emails to himt* domains only."},
+      {"endpoint": "/api/chat (about intent)", "issue": "Query 'Tell me about HIMT' returns only 1 source and the source is /industry-reviews/ rather than the homepage or /about/. Ranking should prefer canonical /about-himt or landing page for 'about' intent."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Improve retrieval/ranking for 'courses' intent: boost URLs matching /course, /modular, /training, /mca or intent_tag='courses' so course pages appear as sources instead of industry-reviews/discounts.",
+    "Filter structured facts extraction: only accept emails matching *@himt*.com / *@himtmarine.com / *@himtcollege.com etc.; drop emails from third-party embedded content.",
+    "Ranking for 'about' intent: boost the homepage / /about-himt / /about-us URLs so 'Tell me about HIMT' cites the primary about page, not /industry-reviews/."
+  ],
+  "critical_code_review_comments": [
+    "server.py couples startup ingestion with request path — consider gating the on-startup crawl behind an env flag to avoid unintended external HTTP on every cold start.",
+    "_ask_llm swallows all exceptions to fallback — verify OPENAI real errors are logged (currently logger.exception is present, ok).",
+    "ingestion.py extracts emails/phones without domain allowlisting → leaks non-HIMT contacts (see facts issue above).",
+    "retrieval.py intent boost values likely too weak for /courses/ URLs — test_chat_courses shows generic pages winning."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/__init__.py"
+  ],
+  "success_rate": {"backend": "94% (16/17)", "frontend": "100% (all data-testids and flows verified)"},
+  "test_credentials": "Admin token: himt-admin-2026 (X-Admin-Token header). No test_credentials.md file exists in /app/memory/.",
+  "seed_data_creation": "No new seed data created. Existing 30 pages / 248 chunks from initial ingestion used. Chat cache seeded via test queries.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend + frontend tests written in /app/backend/tests/backend_test.py (pytest with xdist). Public URL from REACT_APP_BACKEND_URL. Only failing test: TestChat.test_chat_courses due to retrieval quality — fixture matches k in [course, modular, training, mca, dg] against joined source URLs. If retrieval is improved to prefer course pages this will pass. Cache test uses a unique query per run to avoid stale-cache flakes. Reingest test only checks that the new run_id shows up in /admin/runs; it does not wait for completion (took ~9s in prev runs).",
+  "rca of the issue": "test_chat_courses failure — RCA: retrieve() in retrieval.py appears to rank chunks by lexical overlap + intent-tag boost, but pages like /industry-reviews/ and /discounts-and-offers/ contain the words 'course/courses/modular' densely, out-scoring the actual course-listing pages. Fix: (a) increase URL-path boost (e.g., +5) when page_url contains /course, /modular, /training, /mca/, /dg-shipping; (b) ensure intent_tag='courses' chunks receive higher additive boost; (c) optionally de-prioritise pages tagged as reviews/offers/blog for course intent."
+}
