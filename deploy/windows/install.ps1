@@ -218,7 +218,16 @@ Refresh-Path
 Push-Location "$AppDir\frontend"
 try {
   Remove-Item Env:NODE_ENV -ErrorAction SilentlyContinue
-  Run corepack @("yarn", "install", "--frozen-lockfile", "--non-interactive")
+  # Slow or flaky connections time out on the ~1,500 packages: fewer parallel
+  # downloads, a 10-minute timeout, and retries (finished downloads stay cached).
+  $yarnArgs = @("yarn", "install", "--frozen-lockfile", "--non-interactive", "--network-timeout", "600000", "--network-concurrency", "2")
+  $installed = $false
+  for ($try = 1; $try -le 4 -and -not $installed; $try++) {
+    & corepack @yarnArgs
+    if ($LASTEXITCODE -eq 0) { $installed = $true }
+    else { Write-Host "Package download failed (try $try of 4), trying again in 30 seconds..." -ForegroundColor Yellow; Start-Sleep -Seconds 30 }
+  }
+  if (-not $installed) { throw "Could not download the widget's packages. Check the server's internet connection and run install.ps1 again; it continues where it stopped." }
   # No REACT_APP_BACKEND_URL: the widget calls /api on the address it is served from.
   Remove-Item Env:REACT_APP_BACKEND_URL -ErrorAction SilentlyContinue
   $env:NODE_ENV = "production"
@@ -231,8 +240,8 @@ try {
 
 Step "Installing the backend"
 if (-not (Test-Path $VenvPython)) { Run $Python @("-m", "venv", "$AppDir\backend\.venv") }
-Run $VenvPython @("-m", "pip", "install", "--upgrade", "pip")
-Run $VenvPython @("-m", "pip", "install", "-r", "$AppDir\backend\requirements.txt")
+Run $VenvPython @("-m", "pip", "install", "--timeout", "120", "--retries", "10", "--upgrade", "pip")
+Run $VenvPython @("-m", "pip", "install", "--timeout", "120", "--retries", "10", "-r", "$AppDir\backend\requirements.txt")
 
 # --- Windows service ---
 
