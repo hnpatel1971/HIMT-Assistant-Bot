@@ -25,6 +25,7 @@ from retrieval import retrieve, get_structured_facts, detect_intent
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 import resend
+from anthropic import AsyncAnthropic
 
 # ------------- Setup -------------
 ROOT_DIR = Path(__file__).parent
@@ -34,8 +35,9 @@ mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
-OPENAI_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
-ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "himt-admin-2026")
+ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+# No default: the repo is public, so admin endpoints stay locked until ADMIN_TOKEN is set.
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "").strip()
 HIMT_URL = os.environ.get("HIMT_WEBSITE_URL", "https://himtmarine.com")
 HIMT_ADDITIONAL_SITES = [s.strip() for s in os.environ.get("HIMT_ADDITIONAL_SITES", "").split(",") if s.strip()]
 DAILY_REINGEST_HOUR = int(os.environ.get("DAILY_REINGEST_HOUR", "2"))  # 24h clock, UTC
@@ -43,8 +45,10 @@ RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
 RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev").strip()
 WEAK_ANSWER_ALERT_TO = os.environ.get("WEAK_ANSWER_ALERT_TO", "").strip()
 WEAK_ANSWER_ALERT_MIN_INTERVAL_SEC = int(os.environ.get("WEAK_ANSWER_ALERT_MIN_INTERVAL_SEC", "120"))
-MODEL_PROVIDER = "openai"
-MODEL_NAME = "gpt-5.2"
+MODEL_PROVIDER = "anthropic"
+MODEL_NAME = os.environ.get("LLM_MODEL", "").strip() or "claude-opus-5-5"
+# Short grounded Q&A answers do well at low effort; raise via env if quality needs it.
+LLM_EFFORT = os.environ.get("LLM_EFFORT", "").strip() or "low"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
 logger = logging.getLogger("himt")
@@ -271,25 +275,37 @@ USER QUESTION: {query}
 Answer concisely using only the CONTEXT above."""
 
 
+_claude_client: Optional[AsyncAnthropic] = None
+
+
+def _get_claude_client() -> AsyncAnthropic:
+    global _claude_client
+    if _claude_client is None:
+        _claude_client = AsyncAnthropic(api_key=ANTHROPIC_KEY)
+    return _claude_client
+
+
 async def _ask_llm(query: str, chunks, facts: dict, session_id: str, intent: str = "general") -> str:
-    """Call GPT via emergentintegrations with user's OpenAI key. Raise on failure."""
-    if not OPENAI_KEY:
-        raise RuntimeError("OPENAI_API_KEY not configured")
+    """Call Claude with the grounded prompt. Raise on failure so the caller can fall back."""
+    if not ANTHROPIC_KEY:
+        raise RuntimeError("ANTHROPIC_API_KEY not configured")
 
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
-
-    chat = LlmChat(
-        api_key=OPENAI_KEY,
-        session_id=session_id,
-        system_message=SYSTEM_PROMPT,
-    ).with_model(MODEL_PROVIDER, MODEL_NAME).with_params(max_tokens=400)
-
-    user_msg = UserMessage(text=_build_user_prompt(query, chunks, facts, intent=intent))
-    result = await chat.send_message(user_msg)
-    if isinstance(result, str):
-        return result.strip()
-    # emergentintegrations may return object with .content
-    return (getattr(result, "content", None) or str(result)).strip()
+    # max_tokens covers thinking + answer; answer length is kept short by SYSTEM_PROMPT.
+    response = await _get_claude_client().beta.messages.create(
+        model=MODEL_NAME,
+        max_tokens=4000,
+        system=SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": _build_user_prompt(query, chunks, facts, intent=intent)}],
+        output_config={"effort": LLM_EFFORT},
+        betas=["server-side-fallback-2026-07-01"],
+        fallbacks="default",
+    )
+    if response.stop_reason == "refusal":
+        raise RuntimeError("Claude declined the request")
+    answer = "".join(b.text for b in response.content if b.type == "text").strip()
+    if not answer:
+        raise RuntimeError(f"Claude returned no text (stop_reason={response.stop_reason})")
+    return answer
 
 
 # ------------- Routes -------------
@@ -311,7 +327,7 @@ async def health():
         "pages_indexed": pages,
         "chunks_indexed": chunks,
         "has_structured_facts": bool(facts_doc),
-        "openai_configured": bool(OPENAI_KEY),
+        "claude_configured": bool(ANTHROPIC_KEY),
         "latest_ingestion": latest_run,
     }
 
@@ -868,6 +884,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# When WEB_DIST_DIR points at the built frontend (frontend/build), serve it from
+# this same process so one service and one port host both the API and the widget.
+WEB_DIST_DIR = os.environ.get("WEB_DIST_DIR", "").strip()
+if WEB_DIST_DIR:
+    from fastapi.responses import FileResponse
+
+    _web_root = Path(WEB_DIST_DIR).resolve()
+
+    @app.get("/{path:path}", include_in_schema=False)
+    async def web_app(path: str):
+        if path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="not found")
+        candidate = (_web_root / path).resolve()
+        if path and candidate.is_file() and candidate.is_relative_to(_web_root):
+            return FileResponse(candidate)
+        return FileResponse(_web_root / "index.html")
 
 
 @app.on_event("startup")
