@@ -50,6 +50,17 @@ function Run($exe, [string[]]$arguments) {
   }
 }
 
+function Choco-Install([string[]]$packages) {
+  # The community feed sometimes times out (504); try a few times before giving up.
+  for ($try = 1; $try -le 3; $try++) {
+    & choco install -y --no-progress @packages
+    if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 3010) { return }
+    Write-Host "Chocolatey failed (exit code $LASTEXITCODE), trying again in 20 seconds..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 20
+  }
+  throw "Chocolatey could not install: $($packages -join ', '). Check the internet connection and run install.ps1 again."
+}
+
 function New-Secret {
   $bytes = New-Object byte[] 32
   [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
@@ -132,25 +143,39 @@ if (-not (Has choco)) {
 }
 
 Step "Installing Git, NSSM and the IIS proxy modules"
-Run choco @("install", "-y", "--no-progress", "git", "nssm", "urlrewrite", "iis-arr")
+Choco-Install @("git", "nssm", "urlrewrite", "iis-arr")
 Add-MachinePath "C:\Program Files\Git\cmd"
 
 if (-not (Test-Path "C:\Python312\python.exe")) {
   Step "Installing Python 3.12"
-  Run choco @("install", "-y", "--no-progress", "python312")
+  Choco-Install @("python312")
 }
 $Python = "C:\Python312\python.exe"
 
 if (-not (Has node)) {
   Step "Installing Node.js"
-  Run choco @("install", "-y", "--no-progress", "nodejs-lts")
+  Choco-Install @("nodejs-lts")
   Refresh-Path
 }
 
 if (-not (Get-Service MongoDB -ErrorAction SilentlyContinue)) {
   Step "Installing MongoDB"
-  Run choco @("install", "-y", "--no-progress", "mongodb")
+  # Straight from mongodb.com: the Chocolatey package depends on a feed that can time out.
+  $msiUrl = $null
+  try {
+    $feed = Invoke-RestMethod -UseBasicParsing "https://downloads.mongodb.org/current.json"
+    $msiUrl = ($feed.versions | ForEach-Object { $_.downloads } |
+      Where-Object { $_.target -eq "windows" -and $_.edition -eq "base" -and $_.arch -eq "x86_64" -and $_.msi } |
+      Select-Object -First 1).msi
+  } catch { }
+  if (-not $msiUrl) { $msiUrl = "https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-8.0.4-signed.msi" }
+  $msiPath = Join-Path $env:TEMP "mongodb-server.msi"
+  Write-Host "Downloading $msiUrl"
+  Invoke-WebRequest -UseBasicParsing $msiUrl -OutFile $msiPath
+  $install = Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn /norestart ADDLOCAL=`"ServerService`" SHOULD_INSTALL_COMPASS=`"0`"" -Wait -PassThru
+  if ($install.ExitCode -ne 0 -and $install.ExitCode -ne 3010) { throw "MongoDB installer failed with exit code $($install.ExitCode)" }
 }
+if (-not (Get-Service MongoDB -ErrorAction SilentlyContinue)) { throw "MongoDB did not install. Run install.ps1 again; if it fails twice, send the output." }
 Set-Service MongoDB -StartupType Automatic
 if ((Get-Service MongoDB).Status -ne "Running") { Start-Service MongoDB }
 
