@@ -55,15 +55,11 @@ Check it from the server:
 Invoke-WebRequest http://127.0.0.1:8001/api/health
 ```
 
-## Load the website content
+## Website content
 
-The database starts empty. The bot re-crawls the HIMT websites every day at
-`DAILY_REINGEST_HOUR` (UTC). To fill it straight away, trigger a crawl with the
-`ADMIN_TOKEN` from the settings file:
-
-```powershell
-Invoke-WebRequest -Method Post -Headers @{ "X-Admin-Token" = "<ADMIN_TOKEN>" } http://127.0.0.1:8001/api/admin/reingest
-```
+On its first start the bot crawls the HIMT websites by itself, which takes a
+few minutes. After that it re-crawls every day at `DAILY_REINGEST_HOUR` (UTC)
+and refreshes himt.co.in every 6 hours.
 
 Then open `http://<server IP>:8081/` in a browser to try the bot.
 
