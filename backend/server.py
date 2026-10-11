@@ -885,6 +885,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# When WEB_DIST_DIR points at the built frontend (frontend/build), serve it from
+# this same process so one service and one port host both the API and the widget.
+WEB_DIST_DIR = os.environ.get("WEB_DIST_DIR", "").strip()
+if WEB_DIST_DIR:
+    from fastapi.responses import FileResponse
+
+    _web_root = Path(WEB_DIST_DIR).resolve()
+
+    @app.get("/{path:path}", include_in_schema=False)
+    async def web_app(path: str):
+        if path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="not found")
+        candidate = (_web_root / path).resolve()
+        if path and candidate.is_file() and candidate.is_relative_to(_web_root):
+            return FileResponse(candidate)
+        return FileResponse(_web_root / "index.html")
+
 
 @app.on_event("startup")
 async def startup_event():

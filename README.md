@@ -17,7 +17,7 @@ Originally built in Emergent; now runs on the Anthropic Claude API.
 # Backend
 cd backend
 cp .env.example .env        # set MONGO_URL, DB_NAME, ANTHROPIC_API_KEY, ADMIN_TOKEN
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 uvicorn server:app --host 0.0.0.0 --port 8001 --reload
 
 # Frontend
@@ -37,6 +37,12 @@ yarn start
 | `ADMIN_TOKEN` | Required for `/api/admin/*` (sent as `X-Admin-Token`). No default. |
 
 See `backend/.env.example` for the full list.
+
+## Deploying
+
+Production runs on the same Windows Server + IIS as HIMT-LMS: `deploy/windows/install.ps1` sets
+everything up. See [docs/deploy-windows.md](docs/deploy-windows.md). Setting `WEB_DIST_DIR` to the
+built frontend makes the backend serve the widget too, so one service and one port host both.
 
 ## Embedding
 
